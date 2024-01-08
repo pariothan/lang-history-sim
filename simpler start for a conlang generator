@@ -1,0 +1,5 @@
+simpler start for a conlang generator
+
+all languages are strictly CV, thus syllable = mora
+how can we pick phonemes?
+let's go for maximum spread throughout the phoneme map. if tehre are less than two vowels we repair.
