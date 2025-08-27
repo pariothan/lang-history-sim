@@ -15,7 +15,7 @@ def generate_map_from_png(file_path):
     return H_SHAPE
 
 
-H_SHAPE = generate_map_from_png("world.png")
+H_SHAPE = generate_map_from_png("lang-history-sim/afroeurasia.png")
 
 
 def feature_distance(phoneme1, phoneme2):
@@ -638,7 +638,7 @@ class Simulation:
 
         if valid_hosts_coords:
             i, j = random.choice(valid_hosts_coords)
-            self.hosts[i][j].infect(Virus("mɪnjyen"))
+            self.hosts[i][j].infect(Virus("kit"))
 
     def update_virus_counts(self):
         self.virus_counts = {}
@@ -664,7 +664,7 @@ class Simulation:
         for row in self.hosts:
             for host in row:
                 if host and host.virus:
-                    if random.random() < 0.001:
+                    if random.random() < 0.003:
                         self.mutate_virus(host)
                     if random.random() < 0.1:
                         self.spread_virus(host)
