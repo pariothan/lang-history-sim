@@ -18,7 +18,6 @@ def generate_map_from_png(file_path):
 H_SHAPE = generate_map_from_png("lang-history-sim/fantasyworld.png")
 
 def feature_distance(phoneme1, phoneme2):
-    # unchanged logic; we’ll also use a precomputed matrix
     distance = 0
     for feature, value in phoneme1.items():
         if phoneme2[feature] == "0" or value == "0":
@@ -71,18 +70,12 @@ def _feat_to_num(v: str) -> int:
     return 1 if v == "+" else (-1 if v == "-" else 0)
 
 # ---------- Precompute per-phoneme numeric vector and color projections ----------
-# Fixed projection weights (tuples)
 W_R = ( 0.82,-0.41, 0.33, 0.27,-0.58, 0.19, 0.44,-0.21, 0.55, 0.17, 0.36,-0.49, 0.23,-0.12)
 W_G = (-0.37, 0.79,-0.28,-0.55, 0.14, 0.52, 0.18, 0.33,-0.24, 0.47,-0.51, 0.12, 0.40, 0.09)
 W_B = ( 0.11, 0.28, 0.76,-0.36, 0.49,-0.27, 0.15, 0.61, 0.07,-0.58, 0.22, 0.35,-0.33, 0.41)
 
 PHONEME_KEYS = tuple(phonemes.keys())
-# per-phoneme numeric feature vector
-NUM_VEC = {
-    p: tuple(_feat_to_num(phonemes[p][k]) for k in FEATURES)
-    for p in PHONEME_KEYS
-}
-# per-phoneme color dot products (these sum and then divide by n -> identical to avg then dot)
+NUM_VEC = {p: tuple(_feat_to_num(phonemes[p][k]) for k in FEATURES) for p in PHONEME_KEYS}
 PHONEME_COLOR = {
     p: (
         sum(v*w for v, w in zip(NUM_VEC[p], W_R)),
@@ -92,26 +85,20 @@ PHONEME_COLOR = {
     for p in PHONEME_KEYS
 }
 
-# ---------- Precompute distance matrix and weight tables for sampling ----------
-# distance between any two phonemes
-DIST = {
-    a: {b: feature_distance(phonemes[a], phonemes[b]) for b in PHONEME_KEYS}
-    for a in PHONEME_KEYS
-}
-# mutation weights: inverse distance
+# ---------- Precompute distance matrix and weight tables ----------
+DIST = {a: {b: feature_distance(phonemes[a], phonemes[b]) for b in PHONEME_KEYS} for a in PHONEME_KEYS}
 MUTATE_WEIGHTS = {}
 for a in PHONEME_KEYS:
     row = DIST[a]
     m = max(row.values())
-    MUTATE_WEIGHTS[a] = [ (m + 1 - row[b]) for b in PHONEME_KEYS ]
+    MUTATE_WEIGHTS[a] = [(m + 1 - row[b]) for b in PHONEME_KEYS]
 
-# add-operation weights (sweet spot = 2) : inverse of |dist - 2|
 SWEET = 2
 ADD_WEIGHTS = {}
 for a in PHONEME_KEYS:
     vals = [abs(DIST[a][b] - SWEET) for b in PHONEME_KEYS]
     m = max(vals)
-    ADD_WEIGHTS[a] = [ (m + 1 - v) for v in vals ]
+    ADD_WEIGHTS[a] = [(m + 1 - v) for v in vals]
 
 def _to_byte(x):
     y = math.tanh(x)
@@ -127,21 +114,15 @@ def _rgb_to_hex(r,g,b): return f"#{r:02x}{g:02x}{b:02x}"
 def word_to_color(word: str):
     if not word:
         return ("#eeeeee", "#222222")
-    # keep only valid phoneme chars
     chars = [c for c in word if c in phonemes]
     if not chars:
         return ("#dddddd", "#222222")
-
-    # sum precomputed projections, then average (exactly matches previous math)
     sr = sg = sb = 0.0
     for ch in chars:
         r,g,b = PHONEME_COLOR[ch]
         sr += r; sg += g; sb += b
     n = len(chars)
-    r = _to_byte(sr / n)
-    g = _to_byte(sg / n)
-    b = _to_byte(sb / n)
-
+    r = _to_byte(sr / n); g = _to_byte(sg / n); b = _to_byte(sb / n)
     luminance = 0.2126*r + 0.7152*g + 0.0722*b
     text = "#000000" if luminance > 150 else "#ffffff"
     return (_rgb_to_hex(r,g,b), text)
@@ -158,14 +139,11 @@ class Virus:
             return
         op = random.choice(["mutate", "delete", "add"])
         idx = random.randint(0, len(self.word) - 1)
-
         if op == "mutate":
             base = self.word[idx]
             replacement = random.choices(PHONEME_KEYS, weights=MUTATE_WEIGHTS[base])[0]
             self.word[idx] = replacement
-
         elif op == "delete" and len(self.word) > 1:
-            # keep syllabic if it's the last one
             syllabics = syllabic_count(self.word)
             probs = []
             _phonemes = phonemes
@@ -176,7 +154,6 @@ class Virus:
                     probs.append(1.0)
             char_to_delete = random.choices(self.word, weights=probs)[0]
             self.word.remove(char_to_delete)
-
         elif op == "add" and len(self.word) < 5:
             base = self.word[idx]
             new_char = random.choices(PHONEME_KEYS, weights=ADD_WEIGHTS[base])[0]
@@ -185,8 +162,15 @@ class Virus:
 class Host:
     def __init__(self):
         self.virus = None
+        self.cached_word = ""  # keep a cached string for speed
+
+    def refresh_cached_word(self):
+        self.cached_word = "".join(self.virus.word) if (self.virus and self.virus.word) else ""
+
     def infect(self, virus):
+        # clone into new Virus (same as before), then refresh cache
         self.virus = Virus("".join(virus.word))
+        self.refresh_cached_word()
 
 class Simulation:
     def __init__(self):
@@ -198,9 +182,16 @@ class Simulation:
             [Host() if shape[i][j] == 1 else None for j in range(gs)]
             for i in range(gs)
         ]
-        valid_hosts_coords = [(i, j) for i in range(gs) for j in range(gs) if self.hosts[i][j]]
-        if valid_hosts_coords:
-            i, j = random.choice(valid_hosts_coords)
+
+        # precompute valid coords & a coord map for O(1) lookup of a host's position
+        self.valid_coords = [(i, j) for i in range(gs) for j in range(gs) if self.hosts[i][j]]
+        self.coord_of = {self.hosts[i][j]: (i, j) for (i, j) in self.valid_coords}
+
+        # a reusable index array we can shuffle (avoid re-allocating big lists)
+        self._perm_indices = list(range(len(self.valid_coords)))
+
+        if self.valid_coords:
+            i, j = random.choice(self.valid_coords)
             self.hosts[i][j].infect(Virus("kit"))
 
     def update_virus_counts(self):
@@ -208,7 +199,7 @@ class Simulation:
         for row in self.hosts:
             for host in row:
                 if host and host.virus:
-                    w = "".join(host.virus.word)
+                    w = host.cached_word  # use cache
                     vc[w] = vc.get(w, 0) + 1
         self.virus_counts = vc
 
@@ -217,53 +208,45 @@ class Simulation:
         print("Top 10 Viruses:")
         for i, (virus_word, count) in enumerate(sorted_viruses[:10]):
             print(f"{i+1}. {virus_word}: {count} hosts")
-                           
+
     def step(self):
-        # keep existing bookkeeping
         self.update_virus_counts()
         self.print_leaderboard()
 
         hosts = self.hosts
-
-        # ⬇️ NEW: collect current actors (snapshot) and shuffle to remove geographic bias
+        # snapshot of current actors to prevent double-acting
         acting_hosts = [h for row in hosts for h in row if (h and h.virus)]
         random.shuffle(acting_hosts)
 
-        # iterate in randomized order; use the snapshot so newly infected tiles don't act this tick
         for host in acting_hosts:
             if random.random() < 0.003:
-                self.mutate_virus(host)
+                self.mutate_virus(host)   # keeps cached string in sync
             if random.random() < 0.1:
                 self.spread_virus(host)
 
-
     def mutate_virus(self, host):
         host.virus.mutate()
+        host.refresh_cached_word()  # keep cache updated
 
     def spread_virus(self, source_host):
-        gs = self.grid_size
+        si, sj = self.coord_of[source_host]  # O(1) lookup
         hosts = self.hosts
-        source_i = source_j = None
-        for i in range(gs):
-            row = hosts[i]
-            for j in range(gs):
-                if row[j] == source_host:
-                    source_i, source_j = i, j
-                    break
-            if source_i is not None:
-                break
 
-        potential_targets = [(i, j) for i in range(gs) for j in range(gs) if hosts[i][j]]
-        random.shuffle(potential_targets)
+        # shuffle a reusable permutation of indices to iterate targets without replacement
+        perm = self._perm_indices[:]        # shallow copy of small ints list
+        random.shuffle(perm)
 
-        si, sj = source_i, source_j
         src_virus = hosts[si][sj].virus
-        for ti, tj in potential_targets:
+        for idx in perm:
+            ti, tj = self.valid_coords[idx]
+            # skip if target is the source tile
+            if ti == si and tj == sj:
+                continue
             di, dj = ti - si, tj - sj
             num_blanks = abs(di) + abs(dj) - 1
             infection_chance = (1 / 3) ** num_blanks
             if random.random() < infection_chance:
-                hosts[ti][tj].infect(src_virus)
+                hosts[ti][tj].infect(src_virus)  # Host.infect updates cache
                 return
 
 class App:
@@ -296,11 +279,8 @@ class App:
 
         for i, row in enumerate(hosts):
             y = height * i
-            # precompute this row's words once (avoid repeated joins and neighbor recompute)
-            row_words = [
-                ("".join(h.virus.word) if (h and h.virus and h.virus.word) else "")
-                for h in row
-            ]
+            # read cached words (no joins here)
+            row_words = [h.cached_word if h else "" for h in row]
             for j, host in enumerate(row):
                 if host:
                     x = width * j
@@ -318,7 +298,7 @@ class App:
 
                     if i < rows - 1:
                         below = hosts[i + 1][j]
-                        below_word = "".join(below.virus.word) if (below and below.virus and below.virus.word) else ""
+                        below_word = below.cached_word if (below and below.virus) else ""
                         if below_word != word:
                             canvas.create_line(x, y + height, x + width, y + height, fill="#000000")
 
