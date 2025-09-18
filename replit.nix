@@ -11,6 +11,6 @@
     pkgs.libimagequant
     pkgs.lcms2
     pkgs.freetype
-    pkgs.python3Packages.tkinter
+    pkgs.python310Packages.tkinter
   ];
 }
