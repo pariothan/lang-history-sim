@@ -1,0 +1,14 @@
+{
+  "name": "language-evolution-simulator",
+  "version": "1.0.0",
+  "description": "Language Evolution Simulator - A Python application",
+  "main": "main.py",
+  "scripts": {
+    "build": "echo 'This is a Python project. Use: python main.py'",
+    "start": "python main.py",
+    "dev": "python main.py"
+  },
+  "keywords": ["python", "linguistics", "simulation"],
+  "author": "",
+  "license": "MIT"
+}
