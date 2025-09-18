@@ -10,5 +10,8 @@ channel = "stable-23_05"
 language = "python3"
 
 [deployment]
-run = ["python3", "main.py"]
+run = ["poetry", "run", "python", "main.py"]
 deploymentTarget = "cloudrun"
+
+[run]
+command = "poetry install && poetry run python main.py"

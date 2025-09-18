@@ -5,8 +5,8 @@
   "main": "main.py",
   "scripts": {
     "build": "echo 'This is a Python project. Use: python main.py'",
-    "start": "python main.py",
-    "dev": "python main.py"
+    "start": "poetry run python main.py",
+    "dev": "poetry run python main.py"
   },
   "keywords": ["python", "linguistics", "simulation"],
   "author": "",

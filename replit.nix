@@ -1,5 +1,6 @@
 {pkgs}: {
   deps = [
+    pkgs.poetry
     pkgs.zlib
     pkgs.tk
     pkgs.tcl
