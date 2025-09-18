@@ -194,141 +194,60 @@ export class CanvasRenderer {
   getLanguageColor(language: Language | undefined): string {
     if (!language) return '#333333';
     
-    // Create a stable key based on the language's phoneme inventory
-    const colorKey = this.getLanguageColorKey(language);
-    
-    if (this.colorCache.has(colorKey)) {
-      return this.colorCache.get(colorKey)!;
+    // Use language ID for stable caching
+    if (this.stableColorCache.has(language.id)) {
+      return this.stableColorCache.get(language.id)!;
     }
     
-    // Generate color based on phoneme inventory
     const color = this.generateLanguageColor(language);
-    this.colorCache.set(colorKey, color);
+    this.stableColorCache.set(language.id, color);
     return color;
   }
 
-  private getLanguageColorKey(language: Language): string {
-    // Create a stable key from the language's phoneme inventory
-    const sortedPhonemes = Array.from(language.phonemeInventory).sort();
-    return sortedPhonemes.join('|');
-  }
-
   private generateLanguageColor(language: Language): string {
-    const sortedPhonemes = Array.from(language.phonemeInventory).sort();
-    if (sortedPhonemes.length === 0) return '#666666';
-    
-    // Calculate feature vector for the entire phoneme inventory
-    let totalFeatures = new Array(FEATURE_NAMES.length).fill(0);
-    let phonemeCount = 0;
-    
-    for (const phoneme of sortedPhonemes) {
-      if (phoneme in PHONEMES) {
-        const features = PHONEMES[phoneme];
-        for (let i = 0; i < FEATURE_NAMES.length; i++) {
-          const featureName = FEATURE_NAMES[i] as keyof typeof features;
-          totalFeatures[i] += features[featureName];
-        }
-        phonemeCount++;
-      }
-    }
-    
-    if (phonemeCount === 0) return '#666666';
-    
-    // Average the features
-    for (let i = 0; i < totalFeatures.length; i++) {
-      totalFeatures[i] /= phonemeCount;
-    }
-    
-    // Add language-specific variation based on inventory composition
-    const inventoryHash = this.hashString(sortedPhonemes.join(''));
-    const variation = [
-      Math.sin(inventoryHash * 0.1) * 0.3,
-      Math.sin(inventoryHash * 0.13) * 0.3,
-      Math.sin(inventoryHash * 0.17) * 0.3
-    ];
-    
-    // Project to RGB with normalization
-    let r = this.dotProduct(totalFeatures, RGB_PROJECTION[0]) + variation[0];
-    let g = this.dotProduct(totalFeatures, RGB_PROJECTION[1]) + variation[1];
-    let b = this.dotProduct(totalFeatures, RGB_PROJECTION[2]) + variation[2];
-    
-    // Normalize to use full spectrum
-    const normalizeColor = (value: number): number => {
-      // Use sigmoid function to spread values across full range
-      const sigmoid = 1 / (1 + Math.exp(-value * 2));
-      // Map from [0,1] to [30,255] to avoid too dark colors
-      return Math.floor(30 + sigmoid * 225);
-    };
-    
-    const R = normalizeColor(r);
-    const G = normalizeColor(g);
-    const B = normalizeColor(b);
-    
-    // Ensure minimum contrast between RGB components
-    const maxComponent = Math.max(R, G, B);
-    const minComponent = Math.min(R, G, B);
-    
-    if (maxComponent - minComponent < 60) {
-      // Boost the dominant component to increase color saturation
-      const boostFactor = 1.3;
-      if (R === maxComponent) {
-        return `rgb(${Math.min(255, Math.floor(R * boostFactor))}, ${G}, ${B})`;
-      } else if (G === maxComponent) {
-        return `rgb(${R}, ${Math.min(255, Math.floor(G * boostFactor))}, ${B})`;
-      } else {
-        return `rgb(${R}, ${G}, ${Math.min(255, Math.floor(B * boostFactor))})`;
-      }
-    }
-    
-    return `rgb(${R}, ${G}, ${B})`;
+    // Create a deterministic but diverse color based on language characteristics
+    const seed = this.createLanguageSeed(language);
+    return this.generateColorFromSeed(seed);
   }
   
-  private hashString(str: string): number {
+  private createLanguageSeed(language: Language): number {
+    // Create a stable seed from language characteristics
+    const phonemes = Array.from(language.phonemeInventory).sort();
+    const phonemeString = phonemes.join('');
+    
+    // Add language ID for uniqueness
+    const seedString = `${phonemeString}_${language.id}_${language.generation}`;
+    
+    // Create hash
     let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
+    for (let i = 0; i < seedString.length; i++) {
+      const char = seedString.charCodeAt(i);
       hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32-bit integer
+      hash = hash & hash;
     }
     return Math.abs(hash);
   }
-  private wordToColor(word: string): string {
-    if (!word) return '#666666';
+  
+  private generateColorFromSeed(seed: number): string {
+    // Use multiple hash functions to generate RGB values
+    const r = this.hashToRange(seed * 1.1, 80, 255);
+    const g = this.hashToRange(seed * 2.3, 80, 255);
+    const b = this.hashToRange(seed * 3.7, 80, 255);
     
-    const phonemes = Array.from(word);
-    let r = 0, g = 0, b = 0;
-    let count = 0;
+    // Ensure colors are vibrant by boosting the dominant component
+    const max = Math.max(r, g, b);
+    const boostedR = r === max ? Math.min(255, r * 1.2) : r;
+    const boostedG = g === max ? Math.min(255, g * 1.2) : g;
+    const boostedB = b === max ? Math.min(255, b * 1.2) : b;
     
-    for (const phoneme of phonemes) {
-      if (!(phoneme in PHONEMES)) continue;
-      
-      const features = PHONEMES[phoneme];
-      const featureVector = FEATURE_NAMES.map(name => features[name as keyof typeof features]);
-      
-      r += this.dotProduct(featureVector, RGB_PROJECTION[0]);
-      g += this.dotProduct(featureVector, RGB_PROJECTION[1]);
-      b += this.dotProduct(featureVector, RGB_PROJECTION[2]);
-      count++;
-    }
-    
-    if (count === 0) return '#666666';
-    
-    r /= count;
-    g /= count;
-    b /= count;
-    
-    // Squash to [0, 255] range
-    const squash = (x: number): number => {
-      x = Math.tanh(0.6 * x);
-      x = 0.5 + 0.47 * x;
-      return Math.max(0, Math.min(255, Math.floor(x * 255)));
-    };
-    
-    const R = squash(r);
-    const G = squash(g);
-    const B = squash(b);
-    
-    return `rgb(${R}, ${G}, ${B})`;
+    return `rgb(${Math.floor(boostedR)}, ${Math.floor(boostedG)}, ${Math.floor(boostedB)})`;
+  }
+  
+  private hashToRange(seed: number, min: number, max: number): number {
+    // Create a pseudo-random number in range [min, max] from seed
+    const hash = Math.sin(seed) * 10000;
+    const normalized = hash - Math.floor(hash);
+    return min + normalized * (max - min);
   }
 
   private dotProduct(a: number[], b: number[]): number {
