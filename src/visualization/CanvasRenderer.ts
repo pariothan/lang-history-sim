@@ -214,22 +214,83 @@ export class CanvasRenderer {
   }
 
   private generateLanguageColor(language: Language): string {
-    // Use a representative sample of the phoneme inventory
     const sortedPhonemes = Array.from(language.phonemeInventory).sort();
-    
     if (sortedPhonemes.length === 0) return '#666666';
     
-    // Use a mix of phonemes to get better color diversity
-    const samplePhonemes: string[] = [];
+    // Calculate feature vector for the entire phoneme inventory
+    let totalFeatures = new Array(FEATURE_NAMES.length).fill(0);
+    let phonemeCount = 0;
     
-    // Take phonemes from different parts of the inventory for diversity
-    if (sortedPhonemes.length >= 1) samplePhonemes.push(sortedPhonemes[0]); // First
-    if (sortedPhonemes.length >= 3) samplePhonemes.push(sortedPhonemes[Math.floor(sortedPhonemes.length / 3)]); // 1/3
-    if (sortedPhonemes.length >= 2) samplePhonemes.push(sortedPhonemes[Math.floor(sortedPhonemes.length / 2)]); // Middle
-    if (sortedPhonemes.length >= 4) samplePhonemes.push(sortedPhonemes[Math.floor(sortedPhonemes.length * 2 / 3)]); // 2/3
-    if (sortedPhonemes.length >= 2) samplePhonemes.push(sortedPhonemes[sortedPhonemes.length - 1]); // Last
+    for (const phoneme of sortedPhonemes) {
+      if (phoneme in PHONEMES) {
+        const features = PHONEMES[phoneme];
+        for (let i = 0; i < FEATURE_NAMES.length; i++) {
+          const featureName = FEATURE_NAMES[i] as keyof typeof features;
+          totalFeatures[i] += features[featureName];
+        }
+        phonemeCount++;
+      }
+    }
     
-    return this.wordToColor(samplePhonemes.join(''));
+    if (phonemeCount === 0) return '#666666';
+    
+    // Average the features
+    for (let i = 0; i < totalFeatures.length; i++) {
+      totalFeatures[i] /= phonemeCount;
+    }
+    
+    // Add language-specific variation based on inventory composition
+    const inventoryHash = this.hashString(sortedPhonemes.join(''));
+    const variation = [
+      Math.sin(inventoryHash * 0.1) * 0.3,
+      Math.sin(inventoryHash * 0.13) * 0.3,
+      Math.sin(inventoryHash * 0.17) * 0.3
+    ];
+    
+    // Project to RGB with normalization
+    let r = this.dotProduct(totalFeatures, RGB_PROJECTION[0]) + variation[0];
+    let g = this.dotProduct(totalFeatures, RGB_PROJECTION[1]) + variation[1];
+    let b = this.dotProduct(totalFeatures, RGB_PROJECTION[2]) + variation[2];
+    
+    // Normalize to use full spectrum
+    const normalizeColor = (value: number): number => {
+      // Use sigmoid function to spread values across full range
+      const sigmoid = 1 / (1 + Math.exp(-value * 2));
+      // Map from [0,1] to [30,255] to avoid too dark colors
+      return Math.floor(30 + sigmoid * 225);
+    };
+    
+    const R = normalizeColor(r);
+    const G = normalizeColor(g);
+    const B = normalizeColor(b);
+    
+    // Ensure minimum contrast between RGB components
+    const maxComponent = Math.max(R, G, B);
+    const minComponent = Math.min(R, G, B);
+    
+    if (maxComponent - minComponent < 60) {
+      // Boost the dominant component to increase color saturation
+      const boostFactor = 1.3;
+      if (R === maxComponent) {
+        return `rgb(${Math.min(255, Math.floor(R * boostFactor))}, ${G}, ${B})`;
+      } else if (G === maxComponent) {
+        return `rgb(${R}, ${Math.min(255, Math.floor(G * boostFactor))}, ${B})`;
+      } else {
+        return `rgb(${R}, ${G}, ${Math.min(255, Math.floor(B * boostFactor))})`;
+      }
+    }
+    
+    return `rgb(${R}, ${G}, ${B})`;
+  }
+  
+  private hashString(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return Math.abs(hash);
   }
   private wordToColor(word: string): string {
     if (!word) return '#666666';

@@ -374,17 +374,7 @@ export class Language {
   }
 
   getStableColorSeed(): string {
-    // Return a stable, unique string based on phoneme inventory for color generation
-    const sortedPhonemes = Array.from(this.phonemeInventory).sort();
-    
-    // Use a mix of phonemes from different parts of the inventory for uniqueness
-    const samplePhonemes: string[] = [];
-    if (sortedPhonemes.length >= 1) samplePhonemes.push(sortedPhonemes[0]);
-    if (sortedPhonemes.length >= 3) samplePhonemes.push(sortedPhonemes[Math.floor(sortedPhonemes.length / 3)]);
-    if (sortedPhonemes.length >= 2) samplePhonemes.push(sortedPhonemes[Math.floor(sortedPhonemes.length / 2)]);
-    if (sortedPhonemes.length >= 4) samplePhonemes.push(sortedPhonemes[Math.floor(sortedPhonemes.length * 2 / 3)]);
-    if (sortedPhonemes.length >= 2) samplePhonemes.push(sortedPhonemes[sortedPhonemes.length - 1]);
-    
-    return samplePhonemes.join('');
+    // Return the complete sorted phoneme inventory for stable color generation
+    return Array.from(this.phonemeInventory).sort().join('');
   }
 }
