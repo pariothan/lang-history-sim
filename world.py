@@ -60,6 +60,15 @@ class Community:
     
     def __post_init__(self):
         self.prestige = random.uniform(0.1, 0.9)
+    
+    def __hash__(self):
+        # Hash based on coordinates since they uniquely identify a community
+        return hash((self.x, self.y))
+    
+    def __eq__(self, other):
+        if not isinstance(other, Community):
+            return False
+        return self.x == other.x and self.y == other.y
 
 class World:
     """Geographic world with communities and language spread"""

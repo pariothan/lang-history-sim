@@ -79,6 +79,10 @@ class LanguageEvolutionSimulation:
     
     def _apply_language_change(self, language: Language):
         """Apply internal language change"""
+        # Apply phonological evolution with contact influence
+        contact_languages = self._get_contact_languages(language.id)
+        language.evolve(self.tick_count, contact_languages)
+        
         # Mutate random words
         if random.random() < CONFIG.P_MUTATE:
             meanings = list(language.lexicon.keys())
@@ -205,3 +209,28 @@ class LanguageEvolutionSimulation:
             return ""
         language = self.languages.get(community.language_id)
         return language.name if language else f"Lang{community.language_id}"
+    
+    def _get_contact_languages(self, language_id: int) -> List[Language]:
+        """Get languages in contact with the given language"""
+        contact_languages = []
+        
+        # Find communities speaking this language
+        speaking_communities = self.world.get_communities_with_language(language_id)
+        contact_lang_ids = set()
+        
+        # Find neighboring languages
+        for community in speaking_communities:
+            neighbors = self.world.get_neighbors(community)
+            for neighbor in neighbors:
+                if neighbor.language_id != language_id and neighbor.language_id >= 0:
+                    contact_lang_ids.add(neighbor.language_id)
+        
+        # Get Language objects for contact languages
+        for lang_id in contact_lang_ids:
+            if lang_id in self.languages:
+                contact_languages.append(self.languages[lang_id])
+        
+        # Sort by prestige (most influential first)
+        contact_languages.sort(key=lambda lang: lang.prestige, reverse=True)
+        
+        return contact_languages[:5]  # Limit to top 5 contact languages
