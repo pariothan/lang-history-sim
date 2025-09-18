@@ -373,10 +373,9 @@ export class Language {
     return Array.from(this.phonemeInventory).filter(p => !isSyllabic(p)).sort();
   }
 
-  getSampleWord(): string {
-    const words = Array.from(this.lexicon.values());
-    if (words.length === 0) return '';
-    const word = words[Math.floor(Math.random() * words.length)];
-    return word.form.join('');
+  getStableColorSeed(): string {
+    // Return a stable string based on phoneme inventory for color generation
+    const sortedPhonemes = Array.from(this.phonemeInventory).sort();
+    return sortedPhonemes.slice(0, 4).join('');
   }
 }

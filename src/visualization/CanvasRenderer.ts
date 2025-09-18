@@ -11,6 +11,7 @@ export class CanvasRenderer {
   private cellWidth: number = 0;
   private cellHeight: number = 0;
   private colorCache: Map<string, string> = new Map();
+  private stableColorCache: Map<number, string> = new Map();
   
   public onLanguageClick?: (language: Language) => void;
 
@@ -193,17 +194,26 @@ export class CanvasRenderer {
   getLanguageColor(language: Language | undefined): string {
     if (!language) return '#333333';
     
-    const cacheKey = `${language.id}-${language.getSampleWord()}`;
-    if (this.colorCache.has(cacheKey)) {
-      return this.colorCache.get(cacheKey)!;
+    // Use stable cache based only on language ID
+    if (this.stableColorCache.has(language.id)) {
+      return this.stableColorCache.get(language.id)!;
     }
     
-    const sampleWord = language.getSampleWord();
-    const color = this.wordToColor(sampleWord);
-    this.colorCache.set(cacheKey, color);
+    // Generate color based on stable phoneme inventory
+    const color = this.generateStableLanguageColor(language);
+    this.stableColorCache.set(language.id, color);
     return color;
   }
 
+  private generateStableLanguageColor(language: Language): string {
+    // Use the first few phonemes from sorted inventory for stable color
+    const sortedPhonemes = Array.from(language.phonemeInventory).sort();
+    const samplePhonemes = sortedPhonemes.slice(0, 4); // Use first 4 phonemes
+    
+    if (samplePhonemes.length === 0) return '#666666';
+    
+    return this.wordToColor(samplePhonemes.join(''));
+  }
   private wordToColor(word: string): string {
     if (!word) return '#666666';
     
