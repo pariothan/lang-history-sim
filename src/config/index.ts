@@ -1,7 +1,7 @@
 export const CONFIG = {
   // World generation
-  GRID_W: 80,
-  GRID_H: 60,
+  GRID_W: 60,
+  GRID_H: 45,
   LAND_PROB_INIT: 0.35,
   ISLAND_BIAS: 0.4,
   SMOOTH_STEPS: 6,

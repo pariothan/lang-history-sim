@@ -106,23 +106,23 @@ export class CanvasRenderer {
         this.ctx.fillRect(x0, y0, this.cellWidth, this.cellHeight);
         
         // Draw text
-        if (text && this.cellWidth > 15 && this.cellHeight > 15) {
+        if (text && this.cellWidth > 8 && this.cellHeight > 8) {
           this.ctx.fillStyle = this.getTextColor(fillColor);
           
-          // Calculate optimal font size
-          const fontSize = Math.max(8, Math.min(
-            this.cellWidth * 0.25, 
-            this.cellHeight * 0.35, 
-            14
+          // Calculate larger, more readable font size
+          const fontSize = Math.max(6, Math.min(
+            this.cellWidth * 0.6, 
+            this.cellHeight * 0.5, 
+            18
           ));
           
-          this.ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+          this.ctx.font = `bold ${fontSize}px 'Arial', 'Helvetica', sans-serif`;
           this.ctx.textAlign = 'center';
           this.ctx.textBaseline = 'middle';
           
-          // Add text shadow for better readability
-          this.ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-          this.ctx.shadowBlur = 2;
+          // Add stronger text shadow for better readability
+          this.ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+          this.ctx.shadowBlur = 3;
           this.ctx.shadowOffsetX = 1;
           this.ctx.shadowOffsetY = 1;
           
@@ -144,13 +144,15 @@ export class CanvasRenderer {
   }
 
   private getDisplayText(language: Language): string {
-    // For larger cells, show more of the name
-    if (this.cellWidth > 40 && this.cellHeight > 30) {
-      return language.name.length > 6 ? language.name.substring(0, 6) : language.name;
-    } else if (this.cellWidth > 25 && this.cellHeight > 20) {
+    // Show more text based on cell size - be more generous with space
+    if (this.cellWidth > 30 && this.cellHeight > 20) {
+      return language.name.length > 8 ? language.name.substring(0, 8) : language.name;
+    } else if (this.cellWidth > 20 && this.cellHeight > 15) {
+      return language.name.substring(0, 6);
+    } else if (this.cellWidth > 12 && this.cellHeight > 10) {
       return language.name.substring(0, 4);
     } else {
-      return language.name.substring(0, 3);
+      return language.name.substring(0, 2);
     }
   }
 
