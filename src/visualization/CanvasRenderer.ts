@@ -194,23 +194,40 @@ export class CanvasRenderer {
   getLanguageColor(language: Language | undefined): string {
     if (!language) return '#333333';
     
-    // Use stable cache based only on language ID
-    if (this.stableColorCache.has(language.id)) {
-      return this.stableColorCache.get(language.id)!;
+    // Create a stable key based on the language's phoneme inventory
+    const colorKey = this.getLanguageColorKey(language);
+    
+    if (this.colorCache.has(colorKey)) {
+      return this.colorCache.get(colorKey)!;
     }
     
-    // Generate color based on stable phoneme inventory
-    const color = this.generateStableLanguageColor(language);
-    this.stableColorCache.set(language.id, color);
+    // Generate color based on phoneme inventory
+    const color = this.generateLanguageColor(language);
+    this.colorCache.set(colorKey, color);
     return color;
   }
 
-  private generateStableLanguageColor(language: Language): string {
-    // Use the first few phonemes from sorted inventory for stable color
+  private getLanguageColorKey(language: Language): string {
+    // Create a stable key from the language's phoneme inventory
     const sortedPhonemes = Array.from(language.phonemeInventory).sort();
-    const samplePhonemes = sortedPhonemes.slice(0, 4); // Use first 4 phonemes
+    return sortedPhonemes.join('|');
+  }
+
+  private generateLanguageColor(language: Language): string {
+    // Use a representative sample of the phoneme inventory
+    const sortedPhonemes = Array.from(language.phonemeInventory).sort();
     
-    if (samplePhonemes.length === 0) return '#666666';
+    if (sortedPhonemes.length === 0) return '#666666';
+    
+    // Use a mix of phonemes to get better color diversity
+    const samplePhonemes: string[] = [];
+    
+    // Take phonemes from different parts of the inventory for diversity
+    if (sortedPhonemes.length >= 1) samplePhonemes.push(sortedPhonemes[0]); // First
+    if (sortedPhonemes.length >= 3) samplePhonemes.push(sortedPhonemes[Math.floor(sortedPhonemes.length / 3)]); // 1/3
+    if (sortedPhonemes.length >= 2) samplePhonemes.push(sortedPhonemes[Math.floor(sortedPhonemes.length / 2)]); // Middle
+    if (sortedPhonemes.length >= 4) samplePhonemes.push(sortedPhonemes[Math.floor(sortedPhonemes.length * 2 / 3)]); // 2/3
+    if (sortedPhonemes.length >= 2) samplePhonemes.push(sortedPhonemes[sortedPhonemes.length - 1]); // Last
     
     return this.wordToColor(samplePhonemes.join(''));
   }
