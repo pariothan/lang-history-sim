@@ -78,23 +78,25 @@ function App() {
   }, []);
 
   const simulationLoop = useCallback(() => {
-    if (!simulationRef.current || !rendererRef.current || !isRunning) {
-      animationRef.current = requestAnimationFrame(simulationLoop);
+    if (!simulationRef.current || !rendererRef.current) {
       return;
     }
 
-    // Run simulation step
-    simulationRef.current.step();
-    
-    // Render
-    rendererRef.current.render();
-    
-    // Update stats every 10 ticks
-    if (simulationRef.current.tickCount % 10 === 0) {
-      updateStats();
+    if (isRunning) {
+      // Run simulation step
+      simulationRef.current.step();
+      
+      // Render
+      rendererRef.current.render();
+      
+      // Update stats every 10 ticks
+      if (simulationRef.current.tickCount % 10 === 0) {
+        updateStats();
+      }
+    } else {
+      // Still render when paused, just don't step simulation
+      rendererRef.current.render();
     }
-
-    animationRef.current = requestAnimationFrame(simulationLoop);
   }, [isRunning, updateStats]);
 
   const getFrameDelay = () => {
@@ -140,7 +142,7 @@ function App() {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('keydown', handleKeyPress);
       if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
+        clearTimeout(animationRef.current);
       }
     };
   }, [initializeSimulation]);
@@ -150,17 +152,16 @@ function App() {
       cancelAnimationFrame(animationRef.current);
     }
     
-    const scheduleNext = () => {
-      setTimeout(() => {
-        animationRef.current = requestAnimationFrame(simulationLoop);
-      }, getFrameDelay());
+    const runLoop = () => {
+      simulationLoop();
+      animationRef.current = setTimeout(runLoop, getFrameDelay());
     };
     
-    scheduleNext();
+    runLoop();
     
     return () => {
       if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
+        clearTimeout(animationRef.current);
       }
     };
   }, [simulationLoop, simulationSpeed]);
