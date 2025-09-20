@@ -8,6 +8,20 @@ A sophisticated Python application that simulates the evolution and geographic s
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+
+**September 18, 2025:**
+- **COMPLETED**: Comprehensive 6-mode mapmode system allowing users to view linguistic landscapes through different perspectives: language names, vocabulary items, phonological rules, language families, phoneme counts, and speaker counts
+- **IMPLEMENTED**: Interactive mapmode controls with M key to cycle viewing modes and V key to cycle vocabulary words, all with proper redraw triggering
+- **ENHANCED**: Advanced color mapping systems with hash-based colors for categorical modes, gradient colors for numeric modes, and phoneme-based colors for vocabulary visualization
+- **FIXED**: Language family ancestry tracking now traces to root ancestors rather than immediate parents, providing true family groupings across generations
+- **OPTIMIZED**: Numeric gradient calculations pre-computed for consistent scaling and improved rendering performance
+- **RESOLVED**: All visualization issues including boundary rendering (2px black lines), text placement (8-cell spacing), and phonological space optimization for maximum language distinctiveness
+- **IMPLEMENTED**: Complete language contiguity enforcement system using BFS-based connected components analysis to automatically split geographically separated languages
+- **ADDED**: Geographic language branching mechanism that creates new languages without phonological drift when territories become non-contiguous
+- **ENHANCED**: Contiguity-aware seeding system that prevents non-contiguous languages from forming during initialization
+- **OPTIMIZED**: Dirty language tracking system for efficient contiguity checking only on languages that have changed territories
+
 ## System Architecture
 
 ### Core Simulation Engine
@@ -32,6 +46,9 @@ Implements sophisticated sound change mechanisms including:
 
 ### Geographic Spread Model
 Languages spread between adjacent communities based on configurable probabilities. The system tracks prestige relationships and implements borrowing mechanics where communities can adopt words from neighboring languages while adapting them to local phonological constraints.
+
+### Geographic Contiguity System
+Enforces realistic territorial constraints by automatically detecting when languages become geographically separated and splitting them into new contiguous languages. Uses breadth-first search algorithms to identify connected components of speaker communities. When non-contiguous regions are detected, the system preserves the largest territory as the original language and creates new "branch" languages for separated regions without phonological change, reflecting realistic scenarios of political or geographic separation rather than linguistic evolution.
 
 ### Visualization Engine
 Uses Tkinter for real-time rendering of the simulation. Colors are generated from phonological features using projection matrices that map feature vectors to RGB space, creating visually coherent color schemes where phonologically similar words appear in similar colors.

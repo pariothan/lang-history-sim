@@ -3,7 +3,7 @@ Main simulation engine for language evolution and spread
 """
 
 import random
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Set, Optional, Tuple
 from collections import defaultdict
 
 from config import CONFIG
@@ -19,8 +19,14 @@ class LanguageEvolutionSimulation:
         self.languages: Dict[int, Language] = {}
         self.tick_count = 0
         
+        # Contiguity tracking
+        self.dirty_languages: Set[int] = set()
+        
         # Initialize with starter languages
         self._initialize_languages()
+        
+        # Add additional seeding for better island population
+        self._seed_distant_regions()
         
         # Statistics tracking
         self.stats_history = []
@@ -41,6 +47,24 @@ class LanguageEvolutionSimulation:
                     meaning = random.choice(CORE_VOCABULARY)
                     starter_word_obj = Word(starter_word, meaning, lang.id)
                     lang.lexicon[meaning] = starter_word_obj
+    
+    def _seed_distant_regions(self):
+        """Seed a few distant communities with existing languages"""
+        empty_communities = [c for c in self.world.communities if c.language_id == -1]
+        existing_languages = list(self.languages.values())
+        
+        if not existing_languages or not empty_communities:
+            return
+        
+        # Only seed 2-3 additional communities to keep it minimal
+        num_seeds = min(3, len(empty_communities), len(existing_languages))
+        if num_seeds > 0:
+            selected_communities = random.sample(empty_communities, num_seeds)
+            for i, community in enumerate(selected_communities):
+                # Assign to an existing language (cycling through them)
+                language = existing_languages[i % len(existing_languages)]
+                community.language_id = language.id
+                self.dirty_languages.add(language.id)
     
     def step(self):
         """Execute one simulation step"""
@@ -76,6 +100,19 @@ class LanguageEvolutionSimulation:
             # Language splitting
             if random.random() < CONFIG.P_LANGUAGE_SPLIT:
                 self._attempt_language_split(community, language)
+            
+            # Long-distance spread (maritime migration, trade routes, etc.)
+            if random.random() < CONFIG.P_LONG_DISTANCE_SPREAD:
+                self._attempt_long_distance_spread(community, language)
+            
+            # Prestige drift
+            if random.random() < CONFIG.P_PRESTIGE_DRIFT:
+                speaker_count = len(self.world.get_communities_with_language(language.id))
+                language._drift_prestige(speaker_count)
+        
+        # Enforce language contiguity if enabled
+        if CONFIG.CONTIGUITY_STRICT and self.tick_count % CONFIG.CONTIGUITY_ENFORCE_INTERVAL == 0:
+            self._enforce_contiguity()
     
     def _apply_language_change(self, language: Language):
         """Apply internal language change"""
@@ -113,7 +150,10 @@ class LanguageEvolutionSimulation:
                 neighbor.language_id = source_community.language_id
                 
                 # If neighbor had a different language, it might be lost
+                # Track language changes for contiguity
+                self.dirty_languages.add(source_community.language_id)
                 if old_lang_id >= 0:
+                    self.dirty_languages.add(old_lang_id)
                     remaining_speakers = self.world.get_communities_with_language(old_lang_id)
                     if len(remaining_speakers) == 0:
                         # Language went extinct
@@ -156,16 +196,115 @@ class LanguageEvolutionSimulation:
         if len(speakers) < 5:
             return
         
+        # Find connected components to choose a contiguous cluster
+        components = self.world.find_connected_components(language.id)
+        if len(components) <= 1:
+            return  # Already contiguous, can't split meaningfully
+        
+        # Choose a smaller component to split off (not the largest)
+        components.sort(key=len, reverse=True)
+        split_candidates = components[1:]  # All except the largest
+        
+        if not split_candidates:
+            return
+        
+        # Select a component to split off
+        component_to_split = random.choice(split_candidates)
+        
+        # Only proceed if the component is substantial enough
+        if len(component_to_split) < 2:
+            return
+        
         # Create daughter language
         daughter = language.split()
         self.languages[daughter.id] = daughter
         
-        # Assign some speakers to daughter language
-        split_size = random.randint(1, min(3, len(speakers) // 2))
-        communities_to_split = random.sample(speakers, split_size)
-        
-        for comm in communities_to_split:
+        # Assign the entire connected component to daughter language
+        for comm in component_to_split:
             comm.language_id = daughter.id
+        
+        # Track language changes for contiguity
+        self.dirty_languages.add(language.id)
+        self.dirty_languages.add(daughter.id)
+    
+    def _enforce_contiguity(self):
+        """Enforce language contiguity by splitting non-contiguous languages"""
+        # Work on a copy since we'll be modifying the dict
+        languages_to_check = list(self.dirty_languages)
+        self.dirty_languages.clear()
+        
+        for lang_id in languages_to_check:
+            if lang_id not in self.languages:
+                continue
+                
+            language = self.languages[lang_id]
+            components = self.world.find_connected_components(lang_id)
+            
+            if len(components) <= 1:
+                continue  # Language is contiguous or extinct
+            
+            # Keep the largest component as the original language
+            largest_component = max(components, key=len)
+            
+            # Create new languages for other components
+            for i, component in enumerate(components):
+                if component == largest_component:
+                    continue
+                
+                # Create a geographic branch
+                branch = language.branch_geographic()
+                self.languages[branch.id] = branch
+                
+                # Assign communities to the new language
+                for community in component:
+                    community.language_id = branch.id
+    
+    def _attempt_long_distance_spread(self, source_community: Community, language: Language):
+        """Attempt long-distance spread to distant islands/regions"""
+        # Only spread from communities that already have this language
+        if source_community.language_id != language.id:
+            return
+            
+        # Find distant communities
+        distant_communities = self.world.get_distant_communities(
+            source_community, 
+            CONFIG.LONG_DISTANCE_MIN, 
+            CONFIG.LONG_DISTANCE_RANGE
+        )
+        
+        if not distant_communities:
+            return
+        
+        # Calculate long-distance spread probability (much lower than local spread)
+        spread_strength = language.prestige * source_community.prestige
+        
+        # Choose a random distant community
+        target = random.choice(distant_communities)
+        
+        # Distance-based probability reduction (farther = less likely)
+        distance = abs(target.x - source_community.x) + abs(target.y - source_community.y)
+        distance_factor = max(0.1, 1.0 - (distance - CONFIG.LONG_DISTANCE_MIN) / CONFIG.LONG_DISTANCE_RANGE)
+        
+        # Lower probability for long-distance spread
+        spread_prob = spread_strength * 0.03 * distance_factor
+        
+        if random.random() < spread_prob:
+            # Long-distance language spread occurs
+            old_lang_id = target.language_id
+            target.language_id = language.id
+            
+            # Track language changes for contiguity
+            self.dirty_languages.add(language.id)
+            if old_lang_id >= 0:
+                self.dirty_languages.add(old_lang_id)
+            
+            # If target had a different language, it might be lost
+            if old_lang_id >= 0:
+                remaining_speakers = self.world.get_communities_with_language(old_lang_id)
+                if len(remaining_speakers) == 0:
+                    # Language went extinct
+                    if old_lang_id in self.languages:
+                        del self.languages[old_lang_id]
     
     def _print_statistics(self):
         """Print simulation statistics"""

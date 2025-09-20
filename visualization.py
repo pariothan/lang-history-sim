@@ -5,17 +5,56 @@ Visualization and rendering for the language evolution simulation
 import math
 import tkinter as tk
 import tkinter.font as tkfont
+import colorsys
 from functools import lru_cache
 from typing import Dict, Tuple, Optional
+from enum import Enum
 
 from config import CONFIG
 from world import World, Community
 from simulation import LanguageEvolutionSimulation
 from phonology import PHONEMES, RGB_PROJ
 
+class MapMode(Enum):
+    LANGUAGE_NAME = "language_name"
+    VOCABULARY_ITEM = "vocabulary_item" 
+    PHONOLOGICAL_RULES = "phonological_rules"
+    LANGUAGE_FAMILY = "language_family"
+    PHONEME_COUNT = "phoneme_count"
+    SPEAKER_COUNT = "speaker_count"
+    PRESTIGE = "prestige"
+
 def dot(a, b) -> float:
     """Dot product of two vectors"""
     return sum(x*y for x, y in zip(a, b))
+
+@lru_cache(maxsize=4096)
+def hash_to_color(key: str) -> Tuple[int, int, int]:
+    """Convert any string to a stable color using hash-based HSV"""
+    if not key:
+        return (200, 200, 200)
+    
+    # Hash the key to get consistent colors
+    hash_val = hash(key) % 360  # Hue from 0-360
+    
+    # Convert HSV to RGB with fixed saturation and value
+    import colorsys
+    r, g, b = colorsys.hsv_to_rgb(hash_val / 360.0, 0.7, 0.85)
+    return (int(r * 255), int(g * 255), int(b * 255))
+
+def gradient_color(value: int, min_val: int, max_val: int) -> Tuple[int, int, int]:
+    """Map a numeric value to a color gradient"""
+    if max_val == min_val:
+        return (100, 150, 200)  # Default blue
+    
+    # Normalize to 0-1
+    normalized = max(0, min(1, (value - min_val) / (max_val - min_val)))
+    
+    # Blue to red gradient
+    r = int(normalized * 255)
+    g = int((1 - normalized) * 100)
+    b = int((1 - normalized) * 255)
+    return (r, g, b)
 
 @lru_cache(maxsize=4096)
 def word_to_color_cached(word_key: str) -> Tuple[int, int, int]:
@@ -67,6 +106,10 @@ class LanguageRenderer:
         self.simulation = simulation
         self.root = root
         
+        # Mapmode state
+        self.current_mapmode = MapMode.LANGUAGE_NAME
+        self.current_vocabulary_word = "water"  # Default vocabulary item to display
+        
         # Create canvas
         self.canvas = tk.Canvas(root, width=CONFIG.CANVAS_W, height=CONFIG.CANVAS_H, 
                                bg="#101010", highlightthickness=0)
@@ -93,18 +136,194 @@ class LanguageRenderer:
     def _get_font_for_cell(self) -> tkfont.Font:
         """Get appropriate font size for current cell size"""
         px = max(CONFIG.MIN_FONT_PX, 
-                min(CONFIG.MAX_FONT_PX, int(min(self.cell_w, self.cell_h) * 0.55)))
+                min(CONFIG.MAX_FONT_PX, int(min(self.cell_w, self.cell_h) * 0.4)))
         
         if px not in self.font_cache:
             try:
                 self.font_cache[px] = tkfont.Font(
                     family="Consolas" if tk.TkVersion >= 8.5 else "Courier", 
-                    size=px, weight="bold"
+                    size=px, weight="normal"
                 )
             except:
-                self.font_cache[px] = tkfont.Font(size=px, weight="bold")
+                self.font_cache[px] = tkfont.Font(size=px, weight="normal")
         
         return self.font_cache[px]
+    
+    def _should_show_text(self, x: int, y: int, language_id: int) -> bool:
+        """Determine if this cell should show text based on its position in contiguous area"""
+        W, H = self.world.width, self.world.height
+        
+        # Count same-language neighbors (4-connected only)
+        neighbors_same = 0
+        for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < W and 0 <= ny < H:
+                neighbor = self.world.get_community_at(nx, ny)
+                if neighbor and neighbor.language_id == language_id:
+                    neighbors_same += 1
+        
+        # Always show text for completely isolated cells
+        if neighbors_same == 0:
+            return True
+            
+        # Show text for small clusters (1-2 neighbors)
+        if neighbors_same <= 1:
+            return True
+            
+        # For larger areas, sparse grid pattern to avoid crowding
+        text_spacing = 8  # Much wider spacing
+        offset_x = (y % 2) * (text_spacing // 2)  # Stagger rows
+        if (x + offset_x) % text_spacing == 3 and y % text_spacing == 3:
+            return True
+            
+        # Show text only at strict language borders (not map edges)
+        for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < W and 0 <= ny < H:
+                neighbor = self.world.get_community_at(nx, ny)
+                if neighbor is None or neighbor.language_id != language_id:
+                    # Language boundary - only show if it's a significant border
+                    border_count = 0
+                    for dx2, dy2 in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+                        nx2, ny2 = x + dx2, y + dy2
+                        if 0 <= nx2 < W and 0 <= ny2 < H:
+                            neighbor2 = self.world.get_community_at(nx2, ny2)
+                            if neighbor2 is None or neighbor2.language_id != language_id:
+                                border_count += 1
+                    # Only show text if this is a real border (2+ different neighbors)
+                    if border_count >= 2:
+                        return True
+                    break
+        
+        return False
+    
+    def cycle_mapmode(self):
+        """Cycle to the next mapmode"""
+        modes = list(MapMode)
+        current_index = modes.index(self.current_mapmode)
+        self.current_mapmode = modes[(current_index + 1) % len(modes)]
+        mode_descriptions = {
+            MapMode.LANGUAGE_NAME: "Language Names",
+            MapMode.VOCABULARY_ITEM: f"Vocabulary: {self.current_vocabulary_word}", 
+            MapMode.PHONOLOGICAL_RULES: "Phonological Rules",
+            MapMode.LANGUAGE_FAMILY: "Language Families",
+            MapMode.PHONEME_COUNT: "Phoneme Counts",
+            MapMode.SPEAKER_COUNT: "Speaker Counts",
+            MapMode.PRESTIGE: "Language Prestige"
+        }
+        print(f"Mapmode: {mode_descriptions.get(self.current_mapmode, self.current_mapmode.value)}")
+    
+    def cycle_vocabulary_word(self):
+        """Cycle to the next vocabulary word for vocabulary mapmode"""
+        common_words = ["water", "fire", "tree", "stone", "fish", "bird", "sun", "moon", "hand", "head"]
+        try:
+            current_index = common_words.index(self.current_vocabulary_word)
+            self.current_vocabulary_word = common_words[(current_index + 1) % len(common_words)]
+        except ValueError:
+            self.current_vocabulary_word = common_words[0]
+        print(f"Vocabulary word: {self.current_vocabulary_word}")
+        if self.current_mapmode == MapMode.VOCABULARY_ITEM:
+            print(f"Mapmode: Vocabulary: {self.current_vocabulary_word}")
+    
+    def _get_mapmode_display_info(self, language, community_count: int) -> Tuple[str, str]:
+        """Get display text and color key for current mapmode"""
+        if self.current_mapmode == MapMode.LANGUAGE_NAME:
+            return self._get_language_name_info(language)
+        elif self.current_mapmode == MapMode.VOCABULARY_ITEM:
+            return self._get_vocabulary_item_info(language)
+        elif self.current_mapmode == MapMode.PHONOLOGICAL_RULES:
+            return self._get_phonological_rules_info(language)
+        elif self.current_mapmode == MapMode.LANGUAGE_FAMILY:
+            return self._get_language_family_info(language)
+        elif self.current_mapmode == MapMode.PHONEME_COUNT:
+            return self._get_phoneme_count_info(language)
+        elif self.current_mapmode == MapMode.SPEAKER_COUNT:
+            return self._get_speaker_count_info(language, community_count)
+        elif self.current_mapmode == MapMode.PRESTIGE:
+            return self._get_prestige_info(language)
+        else:
+            return self._get_language_name_info(language)
+    
+    def _get_language_name_info(self, language) -> Tuple[str, str]:
+        """Get info for language name mapmode - show actual language names"""
+        language_name = language.name if hasattr(language, 'name') and language.name else f"Lang{language.id}"
+        # Use language ID for consistent coloring
+        color_key = str(language.id)
+        # Strip apostrophes from display text
+        clean_name = language_name.replace("'", "")
+        display_text = clean_name[:8] if len(clean_name) <= 8 else clean_name[:6] + ".."
+        return color_key, display_text
+    
+    def _get_vocabulary_item_info(self, language) -> Tuple[str, str]:
+        """Get info for vocabulary item mapmode"""
+        if language.lexicon and self.current_vocabulary_word in language.lexicon:
+            word_obj = language.lexicon[self.current_vocabulary_word]
+            word_form = word_obj.string_form
+            display_text = word_form[:8] if len(word_form) <= 8 else word_form[:6] + ".."
+            return word_form, display_text
+        return "", "---"
+    
+    def _get_phonological_rules_info(self, language) -> Tuple[str, str]:
+        """Get info for phonological rules mapmode"""
+        # Summarize phonotactic constraints
+        constraints = language.phonotactic_constraints
+        if hasattr(constraints, 'syllable_types') and constraints.syllable_types:
+            # Get dominant syllable type
+            dominant_type = max(constraints.syllable_types.items(), key=lambda x: x[1])
+            if hasattr(dominant_type[0], 'name'):
+                rule_summary = dominant_type[0].name[:4]  # First 4 chars of syllable type
+            else:
+                rule_summary = str(dominant_type[0])[:4]
+            return rule_summary, rule_summary
+        # Fallback: use phoneme count as proxy for rule complexity
+        phoneme_count = len(language.phoneme_inventory)
+        if phoneme_count < 20:
+            rule_summary = "SIMP"
+        elif phoneme_count < 40:
+            rule_summary = "MED"
+        else:
+            rule_summary = "COMP"
+        return rule_summary, rule_summary
+    
+    def _get_language_family_info(self, language) -> Tuple[str, str]:
+        """Get info for language family mapmode - trace to root ancestor"""
+        # Find root ancestor by walking parent chain
+        root_ancestor = language
+        visited = {language.id}  # Prevent infinite loops
+        
+        while (hasattr(root_ancestor, 'parent_id') and 
+               root_ancestor.parent_id is not None and 
+               root_ancestor.parent_id not in visited):
+            parent = self.simulation.get_language_by_id(root_ancestor.parent_id)
+            if parent:
+                visited.add(root_ancestor.parent_id)
+                root_ancestor = parent
+            else:
+                break
+        
+        family_id = f"family_{root_ancestor.id}"
+        return family_id, f"F{root_ancestor.id}"
+    
+    def _get_phoneme_count_info(self, language) -> Tuple[str, str]:
+        """Get info for phoneme count mapmode"""
+        count = len(language.phoneme_inventory)
+        # Use count as both color key and display
+        count_str = str(count)
+        return count_str, count_str
+    
+    def _get_speaker_count_info(self, language, community_count: int) -> Tuple[str, str]:
+        """Get info for speaker count mapmode"""
+        # Use community count as proxy for speaker count
+        count_str = str(community_count)
+        return count_str, count_str
+    
+    def _get_prestige_info(self, language) -> Tuple[str, str]:
+        """Get info for prestige mapmode"""
+        # Convert prestige to integer (multiply by 1000 for precision in display)
+        prestige_int = int(language.prestige * 1000)
+        # Format for display (show as percentage)
+        prestige_display = f"{int(language.prestige * 100)}%"
+        return str(prestige_int), prestige_display
     
     def draw(self):
         """Draw the current state of the simulation"""
@@ -113,6 +332,37 @@ class LanguageRenderer:
         
         self.canvas.delete("all")
         font = self._get_font_for_cell()
+        
+        # First pass: count communities per language for speaker count mapmode
+        language_community_counts = {}
+        for y in range(H):
+            for x in range(W):
+                community = self.world.get_community_at(x, y)
+                if community is not None and community.language_id >= 0:
+                    language_community_counts[community.language_id] = language_community_counts.get(community.language_id, 0) + 1
+        
+        # Pre-compute numeric values for gradient modes to get proper min/max
+        language_numeric_values = {}
+        gradient_min, gradient_max = 0, 1
+        if self.current_mapmode in [MapMode.PHONEME_COUNT, MapMode.SPEAKER_COUNT, MapMode.PRESTIGE]:
+            for lang_id, count in language_community_counts.items():
+                language = self.simulation.get_language_by_id(lang_id)
+                if language:
+                    if self.current_mapmode == MapMode.PHONEME_COUNT:
+                        language_numeric_values[lang_id] = len(language.phoneme_inventory)
+                    elif self.current_mapmode == MapMode.SPEAKER_COUNT:
+                        language_numeric_values[lang_id] = count
+                    elif self.current_mapmode == MapMode.PRESTIGE:
+                        # Convert prestige to integer (multiply by 1000 for precision)
+                        language_numeric_values[lang_id] = int(language.prestige * 1000)
+            
+            # Compute global min/max once
+            if language_numeric_values:
+                all_values = list(language_numeric_values.values())
+                gradient_min, gradient_max = min(all_values), max(all_values)
+        
+        # Cache mapmode display info per language
+        language_display_info = {}  # Cache display info per language
         
         # Draw communities
         for y in range(H):
@@ -124,18 +374,32 @@ class LanguageRenderer:
                 x0, y0 = x * cw, y * ch
                 x1, y1 = x0 + cw, y0 + ch
                 
-                # Determine color and text
+                # Determine color and text using mapmode system
                 if community.language_id >= 0:
                     language = self.simulation.get_language_by_id(community.language_id)
                     if language:
-                        # Get a sample word for coloring
-                        sample_word = ""
-                        if language.lexicon:
-                            sample_meaning = next(iter(language.lexicon))
-                            sample_word = language.lexicon[sample_meaning].string_form
+                        # Get cached mapmode display info for this language
+                        if community.language_id not in language_display_info:
+                            community_count = language_community_counts.get(community.language_id, 0)
+                            color_key, display_text = self._get_mapmode_display_info(language, community_count)
+                            language_display_info[community.language_id] = (color_key, display_text)
                         
-                        rgb = word_to_color_cached(sample_word)
-                        text = language.name[:4]  # Abbreviated name
+                        color_key, display_text = language_display_info[community.language_id]
+                        
+                        # Use appropriate color function based on mapmode
+                        if self.current_mapmode == MapMode.VOCABULARY_ITEM:
+                            rgb = word_to_color_cached(color_key) if color_key else (100, 100, 100)
+                        elif self.current_mapmode in [MapMode.PHONEME_COUNT, MapMode.SPEAKER_COUNT, MapMode.PRESTIGE]:
+                            # Use gradient colors for numeric modes with pre-computed min/max
+                            value = language_numeric_values.get(community.language_id, 0)
+                            rgb = gradient_color(value, gradient_min, gradient_max)
+                        else:
+                            # Use hash-based colors for categorical modes
+                            rgb = hash_to_color(color_key) if color_key else (100, 100, 100)
+                        
+                        # Determine if this cell should show text
+                        should_show = self._should_show_text(x, y, community.language_id)
+                        text = display_text if should_show else ""
                     else:
                         rgb = (100, 100, 100)
                         text = "???"
@@ -148,7 +412,7 @@ class LanguageRenderer:
                 # Draw cell
                 self.canvas.create_rectangle(x0, y0, x1, y1, outline=fill, fill=fill)
                 
-                # Draw text if there's a language
+                # Draw text if determined to show it
                 if text:
                     text_color = text_color_for_bg(rgb)
                     self.canvas.create_text((x0+x1)//2, (y0+y1)//2, text=text, 
@@ -164,6 +428,22 @@ class LanguageRenderer:
         cw, ch = self.cell_w, self.cell_h
         line_color = "#000000"
         
+        def should_draw_boundary(community1, community2):
+            """Check if boundary should be drawn between two communities"""
+            if community1.language_id == community2.language_id:
+                return False
+            
+            # Get languages and compare names without apostrophes
+            lang1 = self.simulation.get_language_by_id(community1.language_id)
+            lang2 = self.simulation.get_language_by_id(community2.language_id)
+            
+            if lang1 and lang2:
+                name1 = lang1.name.replace("'", "") if hasattr(lang1, 'name') and lang1.name else f"Lang{lang1.id}"
+                name2 = lang2.name.replace("'", "") if hasattr(lang2, 'name') and lang2.name else f"Lang{lang2.id}"
+                return name1 != name2
+            
+            return True  # Draw boundary if we can't get language info
+        
         for y in range(H):
             for x in range(W):
                 community = self.world.get_community_at(x, y)
@@ -173,7 +453,7 @@ class LanguageRenderer:
                 # Check right neighbor
                 right_neighbor = self.world.get_community_at(x + 1, y)
                 if (right_neighbor is not None and 
-                    right_neighbor.language_id != community.language_id):
+                    should_draw_boundary(community, right_neighbor)):
                     X = (x + 1) * cw
                     self.canvas.create_line(X, y * ch, X, (y + 1) * ch, 
                                           fill=line_color, width=2)
@@ -181,7 +461,7 @@ class LanguageRenderer:
                 # Check bottom neighbor
                 bottom_neighbor = self.world.get_community_at(x, y + 1)
                 if (bottom_neighbor is not None and 
-                    bottom_neighbor.language_id != community.language_id):
+                    should_draw_boundary(community, bottom_neighbor)):
                     Y = (y + 1) * ch
                     self.canvas.create_line(x * cw, Y, (x + 1) * cw, Y, 
                                           fill=line_color, width=2)
@@ -224,10 +504,18 @@ class LanguageDetailWindow:
         
         # Make window modal
         self.window.transient(parent)
-        self.window.grab_set()
         
-        # Setup UI
+        # Setup UI first
         self._create_widgets()
+        
+        # Center window on parent
+        self.window.update_idletasks()  # Ensure window is fully created
+        
+        # Safe grab set after window is ready
+        try:
+            self.window.grab_set()
+        except tk.TclError:
+            pass  # Window might not be viewable yet, ignore gracefully
     
     def _create_widgets(self):
         """Create the UI widgets"""
@@ -645,6 +933,8 @@ class LanguageEvolutionApp:
         self.root.bind("<KeyPress-r>", lambda e: self._reset_simulation())
         self.root.bind("<KeyPress-n>", lambda e: self._new_world())
         self.root.bind("<space>", lambda e: self._toggle_pause())
+        self.root.bind("<KeyPress-m>", lambda e: self._cycle_mapmode())
+        self.root.bind("<KeyPress-v>", lambda e: self._cycle_vocabulary_word())
         
         # Control state
         self.paused = False
@@ -673,6 +963,18 @@ class LanguageEvolutionApp:
         self.paused = not self.paused
         print("Simulation", "paused" if self.paused else "resumed")
     
+    def _cycle_mapmode(self):
+        """Cycle mapmode and redraw"""
+        self.renderer.cycle_mapmode()
+        self.renderer.draw()
+        self.root.focus_set()  # Ensure window keeps focus for key events
+    
+    def _cycle_vocabulary_word(self):
+        """Cycle vocabulary word and redraw"""
+        self.renderer.cycle_vocabulary_word()
+        self.renderer.draw()
+        self.root.focus_set()  # Ensure window keeps focus for key events
+    
     def _simulation_loop(self):
         """Main simulation loop"""
         if not self.paused:
@@ -690,6 +992,8 @@ class LanguageEvolutionApp:
         print("  R - Reset simulation")
         print("  N - New world")
         print("  Space - Pause/Resume")
+        print("  M - Cycle mapmode (language name/vocabulary/rules/family/phonemes/speakers)")
+        print("  V - Cycle vocabulary word (when in vocabulary mapmode)")
         print()
         
         self.root.focus_set()  # Enable key bindings

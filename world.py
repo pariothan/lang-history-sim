@@ -124,6 +124,21 @@ class World:
             return None
         return random.choice(self.communities)
     
+    def get_distant_communities(self, source: Community, min_distance: int, max_distance: int) -> List[Community]:
+        """Get communities within a distance range (for long-distance interactions)"""
+        distant = []
+        for community in self.communities:
+            if community == source:
+                continue
+            
+            # Calculate Manhattan distance
+            distance = abs(community.x - source.x) + abs(community.y - source.y)
+            
+            if min_distance <= distance <= max_distance:
+                distant.append(community)
+        
+        return distant
+    
     def get_communities_with_language(self, language_id: int) -> List[Community]:
         """Get all communities speaking a specific language"""
         return [c for c in self.communities if c.language_id == language_id]
@@ -135,6 +150,41 @@ class World:
     def get_shuffled_communities(self) -> List[Community]:
         """Get communities in random order"""
         return [self.communities[i] for i in self._perm]
+    
+    def find_connected_components(self, language_id: int) -> List[List[Community]]:
+        """Find connected components of communities speaking the given language"""
+        # Get all communities speaking this language
+        speakers = [c for c in self.communities if c.language_id == language_id]
+        if not speakers:
+            return []
+        
+        # Track visited communities
+        visited = set()
+        components = []
+        
+        for speaker in speakers:
+            if speaker in visited:
+                continue
+                
+            # Start a new component with BFS
+            component = []
+            queue = [speaker]
+            visited.add(speaker)
+            
+            while queue:
+                current = queue.pop(0)
+                component.append(current)
+                
+                # Add adjacent speakers to the component
+                for neighbor in self.get_neighbors(current):
+                    if (neighbor not in visited and 
+                        neighbor.language_id == language_id):
+                        visited.add(neighbor)
+                        queue.append(neighbor)
+            
+            components.append(component)
+        
+        return components
     
     def calculate_language_stats(self) -> dict:
         """Calculate statistics about language distribution"""

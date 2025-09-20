@@ -6,6 +6,7 @@ import math
 import random
 from functools import lru_cache
 from typing import Dict, List, Tuple
+from config import CONFIG
 
 # Distinctive features for phonological representation
 FEATURES = [
@@ -23,6 +24,10 @@ FEATURES = [
     "low",          # + a
     "back",         # + u o, - i e
     "round",        # + u o w; - i e
+    "tense",        # + tense vowels, - lax vowels
+    "distributed",  # + alveolar/dental, - palatal/retroflex
+    "strident",     # + s z ʃ ʒ f v, - θ ð
+    "anterior",     # + labial/dental/alveolar, - palatal/velar
 ]
 
 def fv(**kw: int) -> List[int]:
@@ -33,71 +38,205 @@ def fv(**kw: int) -> List[int]:
 
 # Phoneme inventory with distinctive features
 PHONEMES: Dict[str, List[int]] = {
-    # Vowels
+    # Basic vowels
     "i":  fv(syllabic=+1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
-              labial=-1, coronal=-1, dorsal=+1, high=+1, low=-1, back=-1, round=-1),
+              labial=-1, coronal=-1, dorsal=+1, high=+1, low=-1, back=-1, round=-1, tense=+1),
+    "ɪ":  fv(syllabic=+1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
+              labial=-1, coronal=-1, dorsal=+1, high=+1, low=-1, back=-1, round=-1, tense=-1),
     "e":  fv(syllabic=+1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
-              labial=-1, coronal=-1, dorsal=+1, high=0,  low=0,  back=-1, round=-1),
+              labial=-1, coronal=-1, dorsal=+1, high=0,  low=0,  back=-1, round=-1, tense=+1),
+    "ɛ":  fv(syllabic=+1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
+              labial=-1, coronal=-1, dorsal=+1, high=-1, low=0,  back=-1, round=-1, tense=-1),
+    "æ":  fv(syllabic=+1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
+              labial=-1, coronal=-1, dorsal=+1, high=-1, low=+1, back=-1, round=-1, tense=-1),
     "a":  fv(syllabic=+1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
-              labial=-1, coronal=-1, dorsal=+1, high=-1, low=+1, back=0,  round=-1),
+              labial=-1, coronal=-1, dorsal=+1, high=-1, low=+1, back=0,  round=-1, tense=+1),
+    "ɑ":  fv(syllabic=+1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
+              labial=-1, coronal=-1, dorsal=+1, high=-1, low=+1, back=+1, round=-1, tense=+1),
+    "ɔ":  fv(syllabic=+1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
+              labial=+1, coronal=-1, dorsal=+1, high=-1, low=0,  back=+1, round=+1, tense=-1),
     "o":  fv(syllabic=+1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
-              labial=+1, coronal=-1, dorsal=+1, high=0,  low=0,  back=+1, round=+1),
+              labial=+1, coronal=-1, dorsal=+1, high=0,  low=0,  back=+1, round=+1, tense=+1),
+    "ʊ":  fv(syllabic=+1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
+              labial=+1, coronal=-1, dorsal=+1, high=+1, low=-1, back=+1, round=+1, tense=-1),
     "u":  fv(syllabic=+1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
-              labial=+1, coronal=-1, dorsal=+1, high=+1, low=-1, back=+1, round=+1),
+              labial=+1, coronal=-1, dorsal=+1, high=+1, low=-1, back=+1, round=+1, tense=+1),
     "ə":  fv(syllabic=+1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
-              labial=-1, coronal=-1, dorsal=+1, high=0,  low=0,  back=0,  round=-1),
+              labial=-1, coronal=-1, dorsal=+1, high=0,  low=0,  back=0,  round=-1, tense=-1),
+    
+    # Central vowels
+    "ɨ":  fv(syllabic=+1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
+              labial=-1, coronal=-1, dorsal=+1, high=+1, low=-1, back=0,  round=-1, tense=+1),
+    "ɯ":  fv(syllabic=+1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
+              labial=-1, coronal=-1, dorsal=+1, high=+1, low=-1, back=+1, round=-1, tense=+1),
+    "ɤ":  fv(syllabic=+1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
+              labial=-1, coronal=-1, dorsal=+1, high=0,  low=0,  back=+1, round=-1, tense=+1),
+    
+    # Front rounded vowels
+    "y":  fv(syllabic=+1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
+              labial=+1, coronal=-1, dorsal=+1, high=+1, low=-1, back=-1, round=+1, tense=+1),
+    "ø":  fv(syllabic=+1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
+              labial=+1, coronal=-1, dorsal=+1, high=0,  low=0,  back=-1, round=+1, tense=+1),
+    "œ":  fv(syllabic=+1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
+              labial=+1, coronal=-1, dorsal=+1, high=-1, low=0,  back=-1, round=+1, tense=-1),
 
-    # Stops
+    # Bilabial stops
     "p":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=-1, voice=-1,
-              labial=+1, coronal=-1, dorsal=-1),
+              labial=+1, coronal=-1, dorsal=-1, anterior=+1),
     "b":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=-1, voice=+1,
-              labial=+1, coronal=-1, dorsal=-1),
+              labial=+1, coronal=-1, dorsal=-1, anterior=+1),
+    
+    # Dental/alveolar stops
     "t":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=-1, voice=-1,
-              labial=-1, coronal=+1, dorsal=-1),
+              labial=-1, coronal=+1, dorsal=-1, distributed=+1, anterior=+1),
     "d":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=-1, voice=+1,
-              labial=-1, coronal=+1, dorsal=-1),
+              labial=-1, coronal=+1, dorsal=-1, distributed=+1, anterior=+1),
+    
+    # Retroflex stops
+    "ʈ":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=-1, voice=-1,
+              labial=-1, coronal=+1, dorsal=-1, distributed=-1, anterior=-1),
+    "ɖ":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=-1, voice=+1,
+              labial=-1, coronal=+1, dorsal=-1, distributed=-1, anterior=-1),
+    
+    # Palatal stops
+    "c":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=-1, voice=-1,
+              labial=-1, coronal=-1, dorsal=+1, anterior=-1),
+    "ɟ":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=-1, voice=+1,
+              labial=-1, coronal=-1, dorsal=+1, anterior=-1),
+    
+    # Velar stops
     "k":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=-1, voice=-1,
-              labial=-1, coronal=-1, dorsal=+1),
+              labial=-1, coronal=-1, dorsal=+1, anterior=-1),
     "g":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=-1, voice=+1,
-              labial=-1, coronal=-1, dorsal=+1),
+              labial=-1, coronal=-1, dorsal=+1, anterior=-1),
+    
+    # Uvular stops
+    "q":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=-1, voice=-1,
+              labial=-1, coronal=-1, dorsal=+1, anterior=-1),
+    "ɢ":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=-1, voice=+1,
+              labial=-1, coronal=-1, dorsal=+1, anterior=-1),
+    
+    # Glottal stop
+    "ʔ":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=-1, voice=-1,
+              labial=0, coronal=0, dorsal=0, anterior=0),
 
-    # Fricatives
+    # Bilabial fricatives
+    "ɸ":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=-1,
+              labial=+1, coronal=-1, dorsal=-1, strident=-1, anterior=+1),
+    "β":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=+1,
+              labial=+1, coronal=-1, dorsal=-1, strident=-1, anterior=+1),
+    
+    # Labiodental fricatives
     "f":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=-1,
-              labial=+1, coronal=-1, dorsal=-1),
+              labial=+1, coronal=-1, dorsal=-1, strident=+1, anterior=+1),
     "v":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=+1,
-              labial=+1, coronal=-1, dorsal=-1),
+              labial=+1, coronal=-1, dorsal=-1, strident=+1, anterior=+1),
+    
+    # Dental fricatives
+    "θ":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=-1,
+              labial=-1, coronal=+1, dorsal=-1, strident=-1, distributed=+1, anterior=+1),
+    "ð":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=+1,
+              labial=-1, coronal=+1, dorsal=-1, strident=-1, distributed=+1, anterior=+1),
+    
+    # Alveolar fricatives
     "s":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=-1,
-              labial=-1, coronal=+1, dorsal=-1),
+              labial=-1, coronal=+1, dorsal=-1, strident=+1, distributed=+1, anterior=+1),
     "z":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=+1,
-              labial=-1, coronal=+1, dorsal=-1),
+              labial=-1, coronal=+1, dorsal=-1, strident=+1, distributed=+1, anterior=+1),
+    
+    # Postalveolar fricatives
     "ʃ":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=-1,
-              labial=-1, coronal=+1, dorsal=-1),
+              labial=-1, coronal=+1, dorsal=-1, strident=+1, distributed=-1, anterior=-1),
     "ʒ":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=+1,
-              labial=-1, coronal=+1, dorsal=-1),
+              labial=-1, coronal=+1, dorsal=-1, strident=+1, distributed=-1, anterior=-1),
+    
+    # Retroflex fricatives
+    "ʂ":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=-1,
+              labial=-1, coronal=+1, dorsal=-1, strident=+1, distributed=-1, anterior=-1),
+    "ʐ":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=+1,
+              labial=-1, coronal=+1, dorsal=-1, strident=+1, distributed=-1, anterior=-1),
+    
+    # Palatal fricatives
+    "ç":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=-1,
+              labial=-1, coronal=-1, dorsal=+1, strident=-1, anterior=-1),
+    "ʝ":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=+1,
+              labial=-1, coronal=-1, dorsal=+1, strident=-1, anterior=-1),
+    
+    # Velar fricatives
     "x":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=-1,
-              labial=-1, coronal=-1, dorsal=+1),
+              labial=-1, coronal=-1, dorsal=+1, strident=-1, anterior=-1),
+    "ɣ":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=+1,
+              labial=-1, coronal=-1, dorsal=+1, strident=-1, anterior=-1),
+    
+    # Uvular fricatives
+    "χ":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=-1,
+              labial=-1, coronal=-1, dorsal=+1, strident=-1, anterior=-1),
+    "ʁ":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=+1,
+              labial=-1, coronal=-1, dorsal=+1, strident=-1, anterior=-1),
+    
+    # Pharyngeal fricatives
+    "ħ":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=-1,
+              labial=0, coronal=0, dorsal=0, strident=-1, anterior=0),
+    "ʕ":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=+1,
+              labial=0, coronal=0, dorsal=0, strident=-1, anterior=0),
+    
+    # Glottal fricative
     "h":  fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=+1, voice=-1,
-              labial=0,  coronal=0,  dorsal=0),
+              labial=0, coronal=0, dorsal=0, strident=-1, anterior=0),
+    
+    # Affricates
+    "ts": fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=-1, voice=-1,
+              labial=-1, coronal=+1, dorsal=-1, strident=+1, distributed=+1, anterior=+1),
+    "dz": fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=-1, voice=+1,
+              labial=-1, coronal=+1, dorsal=-1, strident=+1, distributed=+1, anterior=+1),
+    "tʃ": fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=-1, voice=-1,
+              labial=-1, coronal=+1, dorsal=-1, strident=+1, distributed=-1, anterior=-1),
+    "dʒ": fv(syllabic=-1, consonantal=+1, sonorant=-1, continuant=-1, voice=+1,
+              labial=-1, coronal=+1, dorsal=-1, strident=+1, distributed=-1, anterior=-1),
 
     # Nasals
     "m":  fv(syllabic=-1, consonantal=+1, sonorant=+1, continuant=-1, nasal=+1, voice=+1,
-              labial=+1, coronal=-1, dorsal=-1),
+              labial=+1, coronal=-1, dorsal=-1, anterior=+1),
+    "ɱ":  fv(syllabic=-1, consonantal=+1, sonorant=+1, continuant=-1, nasal=+1, voice=+1,
+              labial=+1, coronal=-1, dorsal=-1, anterior=+1),
     "n":  fv(syllabic=-1, consonantal=+1, sonorant=+1, continuant=-1, nasal=+1, voice=+1,
-              labial=-1, coronal=+1, dorsal=-1),
+              labial=-1, coronal=+1, dorsal=-1, distributed=+1, anterior=+1),
+    "ɳ":  fv(syllabic=-1, consonantal=+1, sonorant=+1, continuant=-1, nasal=+1, voice=+1,
+              labial=-1, coronal=+1, dorsal=-1, distributed=-1, anterior=-1),
+    "ɲ":  fv(syllabic=-1, consonantal=+1, sonorant=+1, continuant=-1, nasal=+1, voice=+1,
+              labial=-1, coronal=-1, dorsal=+1, anterior=-1),
     "ŋ":  fv(syllabic=-1, consonantal=+1, sonorant=+1, continuant=-1, nasal=+1, voice=+1,
-              labial=-1, coronal=-1, dorsal=+1),
+              labial=-1, coronal=-1, dorsal=+1, anterior=-1),
+    "ɴ":  fv(syllabic=-1, consonantal=+1, sonorant=+1, continuant=-1, nasal=+1, voice=+1,
+              labial=-1, coronal=-1, dorsal=+1, anterior=-1),
 
     # Liquids
     "l":  fv(syllabic=-1, consonantal=+1, sonorant=+1, continuant=+1, lateral=+1, voice=+1,
-              labial=-1, coronal=+1, dorsal=-1),
+              labial=-1, coronal=+1, dorsal=-1, distributed=+1, anterior=+1),
+    "ɭ":  fv(syllabic=-1, consonantal=+1, sonorant=+1, continuant=+1, lateral=+1, voice=+1,
+              labial=-1, coronal=+1, dorsal=-1, distributed=-1, anterior=-1),
+    "ʎ":  fv(syllabic=-1, consonantal=+1, sonorant=+1, continuant=+1, lateral=+1, voice=+1,
+              labial=-1, coronal=-1, dorsal=+1, anterior=-1),
+    "ʟ":  fv(syllabic=-1, consonantal=+1, sonorant=+1, continuant=+1, lateral=+1, voice=+1,
+              labial=-1, coronal=-1, dorsal=+1, anterior=-1),
     "r":  fv(syllabic=-1, consonantal=+1, sonorant=+1, continuant=+1, voice=+1,
-              labial=-1, coronal=+1, dorsal=-1),
+              labial=-1, coronal=+1, dorsal=-1, distributed=+1, anterior=+1),
+    "ɾ":  fv(syllabic=-1, consonantal=+1, sonorant=+1, continuant=+1, voice=+1,
+              labial=-1, coronal=+1, dorsal=-1, distributed=+1, anterior=+1),
+    "ɽ":  fv(syllabic=-1, consonantal=+1, sonorant=+1, continuant=+1, voice=+1,
+              labial=-1, coronal=+1, dorsal=-1, distributed=-1, anterior=-1),
+    "ʀ":  fv(syllabic=-1, consonantal=+1, sonorant=+1, continuant=+1, voice=+1,
+              labial=-1, coronal=-1, dorsal=+1, anterior=-1),
 
     # Glides
     "j":  fv(syllabic=-1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
-              labial=-1, coronal=-1, dorsal=+1, high=+1, back=-1, round=-1),
+              labial=-1, coronal=-1, dorsal=+1, high=+1, back=-1, round=-1, anterior=-1),
+    "ɥ":  fv(syllabic=-1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
+              labial=+1, coronal=-1, dorsal=+1, high=+1, back=-1, round=+1, anterior=-1),
+    "ɰ":  fv(syllabic=-1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
+              labial=-1, coronal=-1, dorsal=+1, high=+1, back=+1, round=-1, anterior=-1),
     "w":  fv(syllabic=-1, consonantal=-1, sonorant=+1, continuant=+1, voice=+1,
-              labial=+1, coronal=-1, dorsal=+1, high=+1, back=+1, round=+1),
+              labial=+1, coronal=-1, dorsal=+1, high=+1, back=+1, round=+1, anterior=-1),
 }
 
 INVENTORY = sorted(PHONEMES.keys())
@@ -106,9 +245,9 @@ SYLLABIC_IDX = FEATURES.index("syllabic")
 
 # Color projection for visualization
 RGB_PROJ = (
-    [ 0.8, -0.4,  0.2,  0.3,  0.1,  0.2,  0.3,  0.6, -0.2,  0.1,  0.9, -0.3, -0.5, -0.6],  # R
-    [-0.4,  0.8,  0.1,  0.5,  0.2, -0.2,  0.3,  0.1,  0.6,  0.2, -0.5,  0.7,  0.4, -0.2],  # G
-    [ 0.1,  0.2,  0.8, -0.4, -0.2,  0.5, -0.3, -0.2,  0.2,  0.7,  0.3,  0.1, -0.1,  0.9],  # B
+    [ 0.8, -0.4,  0.2,  0.3,  0.1,  0.2,  0.3,  0.6, -0.2,  0.1,  0.9, -0.3, -0.5, -0.6,  0.4, -0.3,  0.5, -0.2],  # R
+    [-0.4,  0.8,  0.1,  0.5,  0.2, -0.2,  0.3,  0.1,  0.6,  0.2, -0.5,  0.7,  0.4, -0.2, -0.3,  0.6, -0.1,  0.4],  # G
+    [ 0.1,  0.2,  0.8, -0.4, -0.2,  0.5, -0.3, -0.2,  0.2,  0.7,  0.3,  0.1, -0.1,  0.9, -0.5,  0.2,  0.7, -0.4],  # B
 )
 
 def feature_distance(a: List[int], b: List[int]) -> int:
@@ -842,13 +981,13 @@ class PhonologicalRuleSet:
     def evolve(self, tick: int, conservatism: float = 0.5, contact_pressure: float = 0.0):
         """Evolve the rule set over time"""
         # Add new rules occasionally
-        if random.random() < (1.0 - conservatism) * 0.05:  # 5% base chance
+        if random.random() < (1.0 - conservatism) * CONFIG.P_RULE_GENERATION_BASE:
             new_rule = self._generate_random_rule(tick)
             if new_rule:
                 self.add_rule(new_rule, tick)
         
         # Remove rules that have decayed too much
-        self.rules = [rule for rule in self.rules if rule.get_current_productivity(tick) > 0.001]
+        self.rules = [rule for rule in self.rules if rule.get_current_productivity(tick) > CONFIG.RULE_PRODUCTIVITY_THRESHOLD]
         
         # Update version if rules changed
         if len(self.get_active_rules(tick)) != len(self.get_active_rules(tick - 1)):
