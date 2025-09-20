@@ -248,15 +248,11 @@ export class CanvasRenderer {
       return this.stableColorCache.get(language.id)!;
     }
     
-    const color = this.createLanguageColor(language);
-    this.stableColorCache.set(language.id, color);
-    return color;
-  }
-
-  private createLanguageColor(language: Language): string {
     // Create a deterministic but diverse color based on language characteristics
     const seed = this.createLanguageSeed(language);
-    return this.generateColorFromSeed(seed);
+    const color = this.generateColorFromSeed(seed);
+    this.stableColorCache.set(language.id, color);
+    return color;
   }
   
   private createLanguageSeed(language: Language): number {
@@ -300,23 +296,62 @@ export class CanvasRenderer {
   }
 
   private generatePrestigeColor(language: Language): string {
-    return '#ff0000'; // Placeholder
+    // Red = high prestige, Blue = low prestige
+    const prestige = language.prestige;
+    const red = Math.floor(80 + prestige * 175);
+    const blue = Math.floor(80 + (1 - prestige) * 175);
+    const green = Math.floor(60 + Math.random() * 40); // Some variation
+    return `rgb(${red}, ${green}, ${blue})`;
   }
 
   private generateAgeColor(language: Language): string {
-    return '#00ff00'; // Placeholder
+    // Purple = old (high generation), Green = young (low generation)
+    const maxGeneration = 10; // Assume max generation for scaling
+    const ageRatio = Math.min(language.generation / maxGeneration, 1);
+    
+    const red = Math.floor(80 + ageRatio * 120);
+    const green = Math.floor(80 + (1 - ageRatio) * 175);
+    const blue = Math.floor(80 + ageRatio * 175);
+    return `rgb(${red}, ${green}, ${blue})`;
   }
 
   private generatePhonemeCountColor(language: Language): string {
-    return '#0000ff'; // Placeholder
+    // Orange = many phonemes, Cyan = few phonemes
+    const phonemeCount = language.getPhonemeCount();
+    const minPhonemes = 10;
+    const maxPhonemes = 30;
+    const ratio = Math.min(Math.max((phonemeCount - minPhonemes) / (maxPhonemes - minPhonemes), 0), 1);
+    
+    const red = Math.floor(80 + ratio * 175);
+    const green = Math.floor(80 + ratio * 100);
+    const blue = Math.floor(80 + (1 - ratio) * 175);
+    return `rgb(${red}, ${green}, ${blue})`;
   }
 
   private generateVocabularyColor(language: Language): string {
-    return '#ffff00'; // Placeholder
+    // Yellow = large vocabulary, Magenta = small vocabulary
+    const vocabSize = language.getVocabularySize();
+    const minVocab = 50;
+    const maxVocab = 200;
+    const ratio = Math.min(Math.max((vocabSize - minVocab) / (maxVocab - minVocab), 0), 1);
+    
+    const red = Math.floor(80 + ratio * 175);
+    const green = Math.floor(80 + ratio * 175);
+    const blue = Math.floor(80 + (1 - ratio) * 100);
+    return `rgb(${red}, ${green}, ${blue})`;
   }
 
   private generateFamilyColor(language: Language): string {
-    return '#ff00ff'; // Placeholder
+    // Same color for language families (based on root ancestor)
+    const rootId = this.findRootLanguage(language);
+    const seed = rootId * 12345; // Deterministic seed based on root
+    return this.generateColorFromSeed(seed);
+  }
+
+  private findRootLanguage(language: Language): number {
+    // For now, use the language's parent chain to find root
+    // In a full implementation, you'd traverse up the parent chain
+    return language.parentId || language.id;
   }
 
   private dotProduct(a: number[], b: number[]): number {
