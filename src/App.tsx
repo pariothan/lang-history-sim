@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Play, Pause, RotateCcw, Info, X, HelpCircle, Gauge } from 'lucide-react';
+import { Play, Pause, RotateCcw, Info, X, HelpCircle, Gauge, Map } from 'lucide-react';
 import { LanguageEvolutionSimulation } from './simulation/LanguageEvolutionSimulation';
 import { CanvasRenderer } from './visualization/CanvasRenderer';
 import { Language } from './simulation/Language';
 import { LanguageDetailModal } from './components/LanguageDetailModal';
 import { HelpModal } from './components/HelpModal';
+import { MapMode } from './types';
 
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -17,6 +18,7 @@ function App() {
   const [selectedLanguage, setSelectedLanguage] = useState<Language | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [simulationSpeed, setSimulationSpeed] = useState(50); // milliseconds between frames
+  const [currentMapMode, setCurrentMapMode] = useState<MapMode>(MapMode.LANGUAGES);
   const [stats, setStats] = useState({
     tick: 0,
     communities: 0,
@@ -34,6 +36,9 @@ function App() {
     
     // Create renderer
     rendererRef.current = new CanvasRenderer(canvasRef.current, simulationRef.current);
+    
+    // Set initial map mode
+    rendererRef.current.setMapMode(currentMapMode);
     
     // Set up click handler
     rendererRef.current.onLanguageClick = (language: Language) => {
@@ -174,6 +179,13 @@ function App() {
     initializeSimulation();
   };
 
+  const handleMapModeChange = (mode: MapMode) => {
+    setCurrentMapMode(mode);
+    if (rendererRef.current) {
+      rendererRef.current.setMapMode(mode);
+    }
+  };
+
   return (
     <div className="app">
       <header className="header">
@@ -195,6 +207,22 @@ function App() {
             <HelpCircle size={16} />
             Help
           </button>
+          <div className="mapmode-control">
+            <Map size={16} />
+            <span>View:</span>
+            <select 
+              value={currentMapMode} 
+              onChange={(e) => handleMapModeChange(e.target.value as MapMode)}
+              className="mapmode-select"
+            >
+              <option value={MapMode.LANGUAGES}>Languages</option>
+              <option value={MapMode.PRESTIGE}>Prestige</option>
+              <option value={MapMode.AGE}>Age</option>
+              <option value={MapMode.PHONEME_COUNT}>Phonemes</option>
+              <option value={MapMode.VOCABULARY_SIZE}>Vocabulary</option>
+              <option value={MapMode.LANGUAGE_FAMILIES}>Families</option>
+            </select>
+          </div>
           <div className="speed-control">
             <Gauge size={16} />
             <span>Speed:</span>

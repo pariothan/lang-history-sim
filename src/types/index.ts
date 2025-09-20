@@ -63,3 +63,12 @@ export interface PhonotacticConstraints {
   geminableConsonants: Set<string>;
   forbiddenSequences: Set<string>;
 }
+
+export enum MapMode {
+  LANGUAGES = "languages",
+  PRESTIGE = "prestige", 
+  AGE = "age",
+  PHONEME_COUNT = "phoneme_count",
+  VOCABULARY_SIZE = "vocabulary_size",
+  LANGUAGE_FAMILIES = "language_families"
+}

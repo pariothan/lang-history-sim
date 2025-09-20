@@ -1,6 +1,6 @@
 import { LanguageEvolutionSimulation } from '../simulation/LanguageEvolutionSimulation';
 import { Language } from '../simulation/Language';
-import { Community } from '../types';
+import { Community, MapMode } from '../types';
 import { PHONEMES, RGB_PROJECTION, FEATURE_NAMES } from '../data/phonemes';
 import { CONFIG } from '../config';
 
@@ -74,6 +74,12 @@ export class CanvasRenderer {
     this.setupCanvas();
   }
 
+  setMapMode(mode: MapMode): void {
+    this.currentMapMode = mode;
+    // Clear color cache when switching modes
+    this.colorCache.clear();
+  }
+
   render(): void {
     this.ctx.fillStyle = '#000000';
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -97,7 +103,7 @@ export class CanvasRenderer {
         if (community.languageId >= 0) {
           const language = this.simulation.getLanguageById(community.languageId);
           if (language) {
-            fillColor = this.getLanguageColor(language);
+            fillColor = this.getColorForMapMode(language, community);
             text = this.getDisplayText(language);
           }
         }
@@ -194,17 +200,58 @@ export class CanvasRenderer {
   getLanguageColor(language: Language | undefined): string {
     if (!language) return '#333333';
     
+    // This method is used by external components, default to language mode
+    return this.getColorForMapMode(language, null);
+  }
+
+  private getColorForMapMode(language: Language, community: Community | null): string {
+    if (!language) return '#333333';
+    
+    const cacheKey = `${this.currentMapMode}_${language.id}`;
+    if (this.colorCache.has(cacheKey)) {
+      return this.colorCache.get(cacheKey)!;
+    }
+    
+    let color: string;
+    
+    switch (this.currentMapMode) {
+      case MapMode.LANGUAGES:
+        color = this.generateLanguageColor(language);
+        break;
+      case MapMode.PRESTIGE:
+        color = this.generatePrestigeColor(language);
+        break;
+      case MapMode.AGE:
+        color = this.generateAgeColor(language);
+        break;
+      case MapMode.PHONEME_COUNT:
+        color = this.generatePhonemeCountColor(language);
+        break;
+      case MapMode.VOCABULARY_SIZE:
+        color = this.generateVocabularyColor(language);
+        break;
+      case MapMode.LANGUAGE_FAMILIES:
+        color = this.generateFamilyColor(language);
+        break;
+      default:
+        color = this.generateLanguageColor(language);
+    }
+    
+    this.colorCache.set(cacheKey, color);
+    return color;
+  }
+
+  private createLanguageColor(language: Language): string {
     // Use language ID for stable caching
     if (this.stableColorCache.has(language.id)) {
       return this.stableColorCache.get(language.id)!;
     }
     
-    const color = this.generateLanguageColor(language);
+    const color = this.createLanguageColor(language);
     this.stableColorCache.set(language.id, color);
     return color;
   }
 
-  private generateLanguageColor(language: Language): string {
     // Create a deterministic but diverse color based on language characteristics
     const seed = this.createLanguageSeed(language);
     return this.generateColorFromSeed(seed);
@@ -248,6 +295,65 @@ export class CanvasRenderer {
     const hash = Math.sin(seed) * 10000;
     const normalized = hash - Math.floor(hash);
     return min + normalized * (max - min);
+  }
+
+  private generatePrestigeColor(language: Language): string {
+    // Red = high prestige, Blue = low prestige
+    const prestige = language.prestige;
+    const red = Math.floor(80 + prestige * 175);
+    const blue = Math.floor(80 + (1 - prestige) * 175);
+    const green = Math.floor(60 + Math.random() * 40); // Some variation
+    return `rgb(${red}, ${green}, ${blue})`;
+  }
+
+  private generateAgeColor(language: Language): string {
+    // Purple = old (high generation), Green = young (low generation)
+    const maxGeneration = 10; // Assume max generation for scaling
+    const ageRatio = Math.min(language.generation / maxGeneration, 1);
+    
+    const red = Math.floor(80 + ageRatio * 120);
+    const green = Math.floor(80 + (1 - ageRatio) * 175);
+    const blue = Math.floor(80 + ageRatio * 175);
+    return `rgb(${red}, ${green}, ${blue})`;
+  }
+
+  private generatePhonemeCountColor(language: Language): string {
+    // Orange = many phonemes, Cyan = few phonemes
+    const phonemeCount = language.getPhonemeCount();
+    const minPhonemes = 10;
+    const maxPhonemes = 30;
+    const ratio = Math.min(Math.max((phonemeCount - minPhonemes) / (maxPhonemes - minPhonemes), 0), 1);
+    
+    const red = Math.floor(80 + ratio * 175);
+    const green = Math.floor(80 + ratio * 100);
+    const blue = Math.floor(80 + (1 - ratio) * 175);
+    return `rgb(${red}, ${green}, ${blue})`;
+  }
+
+  private generateVocabularyColor(language: Language): string {
+    // Yellow = large vocabulary, Magenta = small vocabulary
+    const vocabSize = language.getVocabularySize();
+    const minVocab = 50;
+    const maxVocab = 200;
+    const ratio = Math.min(Math.max((vocabSize - minVocab) / (maxVocab - minVocab), 0), 1);
+    
+    const red = Math.floor(80 + ratio * 175);
+    const green = Math.floor(80 + ratio * 175);
+    const blue = Math.floor(80 + (1 - ratio) * 100);
+    return `rgb(${red}, ${green}, ${blue})`;
+  }
+
+  private generateFamilyColor(language: Language): string {
+    // Same color for language families (based on root ancestor)
+    const rootId = this.findRootLanguage(language);
+    const seed = rootId * 12345; // Deterministic seed based on root
+    return this.generateColorFromSeed(seed);
+  }
+
+  private findRootLanguage(language: Language): number {
+    // For now, use the language's parent chain to find root
+    // In a full implementation, you'd traverse up the parent chain
+    return language.parentId || language.id;
   }
 
   private dotProduct(a: number[], b: number[]): number {

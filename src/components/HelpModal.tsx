@@ -59,7 +59,19 @@ export function HelpModal({ onClose }: HelpModalProps) {
               <li><kbd>H</kbd> - Show this help dialog</li>
               <li><kbd>Esc</kbd> - Close dialogs</li>
               <li><strong>Speed Slider</strong> - Adjust simulation speed from 1% to 100%</li>
+              <li><strong>View Dropdown</strong> - Switch between different map visualization modes</li>
               <li><strong>Click</strong> on any colored region to view detailed language information</li>
+            </ul>
+
+            <h4>Map Modes</h4>
+            <p>Use the "View" dropdown to switch between different visualization modes:</p>
+            <ul>
+              <li><strong>Languages</strong> - Each language has a unique color based on its sound system</li>
+              <li><strong>Prestige</strong> - Red = high prestige, Blue = low prestige languages</li>
+              <li><strong>Age</strong> - Purple = older languages, Green = younger languages</li>
+              <li><strong>Phonemes</strong> - Orange = many sounds, Cyan = few sounds</li>
+              <li><strong>Vocabulary</strong> - Yellow = large vocabulary, Magenta = small vocabulary</li>
+              <li><strong>Families</strong> - Related languages share similar colors</li>
             </ul>
 
             <h4>Language Details</h4>
